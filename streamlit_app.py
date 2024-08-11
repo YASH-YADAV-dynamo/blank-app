@@ -99,40 +99,51 @@ st.markdown("""
 with st.form(key='input_form'):
     st.subheader("Configure Alerts")
 
-    tickers_input = st.text_input("Enter stock ticker(s) separated by commas (e.g., MSFT, GOOGL, RELIANCE.BSE)", placeholder="MSFT, GOOGL, RELIANCE.BSE")
+    tickers_input = st.text_input("Enter stock symbols separated by commas (e.g., MSFT, GOOGL, RELIANCE.BSE)", placeholder="MSFT, GOOGL, RELIANCE.BSE")
+    submit_button = st.form_submit_button("Submit Symbol")
+
     tickers = [ticker.strip().upper() for ticker in tickers_input.split(',') if ticker.strip()]
 
-    if tickers:
-        st.write("Set price limits for each ticker:")
-        upper_limits = []
-        lower_limits = []
-        for ticker in tickers:
-            col1, col2 = st.columns(2)
-            with col1:
-                upper = st.number_input(f"Upper limit for {ticker}", min_value=0.0, value=0.0, format="%.2f")
-            with col2:
-                lower = st.number_input(f"Lower limit for {ticker}", min_value=0.0, value=0.0, format="%.2f")
-            upper_limits.append(upper)
-            lower_limits.append(lower)
+    if submit_button or st.session_state.get('submitted'):
+        if tickers:
+            st.session_state['submitted'] = True
+            st.write("Set price limits for each ticker:")
+            upper_limits = []
+            lower_limits = []
+            for ticker in tickers:
+                col1, col2 = st.columns(2)
+                with col1:
+                    upper = st.number_input(f"Upper limit for {ticker}", min_value=0.0, value=0.0, format="%.2f")
+                with col2:
+                    lower = st.number_input(f"Lower limit for {ticker}", min_value=0.0, value=0.0, format="%.2f")
+                upper_limits.append(upper)
+                lower_limits.append(lower)
 
-        check_interval = st.number_input("Enter check interval in seconds", min_value=1, value=60)
-        submit_button = st.form_submit_button("Start Monitoring")
+            check_interval = st.number_input("Enter check interval in seconds", min_value=1, value=60)
+            start_button = st.form_submit_button("Start Monitoring")
 
-        if submit_button:
-            if not upper_limits or not lower_limits:
-                st.error("Please provide valid limits for all tickers.")
-            else:
-                st.write("Monitoring started...")
-                for ticker in tickers:
-                    st.session_state[ticker] = None
-                    st.session_state[f"{ticker}_alert"] = ""
-
-                # Start the monitoring thread
-                threading.Thread(target=monitor_stocks, args=(tickers, upper_limits, lower_limits, check_interval), daemon=True).start()
+            if start_button:
+                if not upper_limits or not lower_limits:
+                    st.error("Please provide valid limits for all tickers.")
+                else:
+                    st.session_state['tickers'] = tickers
+                    st.session_state['upper_limits'] = upper_limits
+                    st.session_state['lower_limits'] = lower_limits
+                    st.session_state['check_interval'] = check_interval
+                    st.session_state['monitoring'] = True
+                    st.write("Monitoring started...")
+                    # Start monitoring in a new thread
+                    threading.Thread(target=monitor_stocks, args=(
+                        st.session_state['tickers'],
+                        st.session_state['upper_limits'],
+                        st.session_state['lower_limits'],
+                        st.session_state['check_interval']
+                    ), daemon=True).start()
 
 # Display alerts and chart
-if 'input_form' in st.session_state:
+if st.session_state.get('monitoring'):
     st.subheader("Alerts")
+    tickers = st.session_state.get('tickers', [])
     for ticker in tickers:
         alert_message = st.session_state.get(f"{ticker}_alert", "")
         if alert_message:
